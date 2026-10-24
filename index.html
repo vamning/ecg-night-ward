@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05080d">
+  <title>噹噹噹! 病人怎麼了? · 新進護理師心電圖訓練</title>
+  <meta name="description" content="夜班帶組護理師的一晚：呼叫鈴一響，回護理站接聽、去床邊看病人和心電圖、判讀心律、通報醫師。9 個關卡練習基礎心電圖判讀。">
+  <!-- link previews (LINE, Facebook, IG): put your own address and picture here once the game is online
+  <meta property="og:url" content="https://example.com/">
+  <meta property="og:image" content="https://example.com/og.jpg"> -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="噹噹噹! 病人怎麼了? · 新進護理師心電圖訓練">
+  <meta property="og:description" content="9 個關卡，練習基礎心電圖判讀與通報醫師。">
+  <!-- no tab icon of its own: put yours here (an empty one keeps the browser from asking for /favicon.ico) -->
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="game/game.css">
+</head>
+<body class="game-page">
+  <div class="frame" id="frame" tabindex="0" aria-label="遊戲畫面：點一下後可以用鍵盤操作">
+    <canvas id="view"></canvas>
+    <div class="loading" id="loading">正在蓋病房…</div>
+    <div class="layer">
+      <div class="sleepfx" id="sleep" hidden>
+        <div class="sleepcard with-me">
+          <img class="me" id="sleepMe" src="assets/game/char/pgy_m_sleepy.svg" alt="">
+          <header><b>喝水休息中</b><span id="sleepPct">0%</span></header>
+          <div class="bar"><i id="sleepBar"></i></div>
+          <p>喝口水、坐一下，精力慢慢回來，時間也過得特別快。按 <span class="key">E</span> 起來。</p>
+        </div>
+      </div>
+      <div id="marks"></div>
+
+      <div class="hud-time"><span class="ward" id="hudWard">病房 · 值班</span><b class="clock" id="clock">17:00</b><span class="sub" id="untilHandover">完成 0 / 9 間病房</span><span class="coinrow">🪙 金幣 <b id="coins">0 / 9</b></span></div>
+      <div class="hud-right">
+        <div class="meters">
+          <div class="meter"><span>精力</span><div class="bar"><i id="mEnergy"></i></div><em id="tEnergy">45%</em></div>
+          <div class="meter"><span>尿意</span><div class="bar"><i id="mBladder"></i></div><em id="tBladder">62%</em></div>
+        </div>
+        <div class="hud-btns"><button class="hbtn" id="btnPause" type="button"><span class="key">P</span>暫停</button><button class="hbtn" id="btnMap" type="button"><span class="key">M</span>全景</button><button class="hbtn" id="btnEnd" type="button">交班</button></div>
+      </div>
+      <aside class="hud-calls" id="calls"></aside>
+      <div class="goal" id="goal"></div>
+      <div class="toast" id="toast" hidden>
+        <span class="avatar" id="toastAvatar" hidden></span>
+        <span id="toastText"></span>
+      </div>
+
+      <!-- a bed: the patient, the monitor to tap, and the story's choices (game/levels.js) -->
+      <div class="bedside" id="bedside" hidden>
+        <header class="bs-top">
+          <span class="bs-room" id="bsRoom">Room 1</span>
+          <span class="bs-hearts" id="bsHearts" role="img"></span>
+          <span class="bs-btns"><button class="btn" id="bsFlow" type="button">作業標準流程</button><button class="btn" id="bsPause" type="button">暫停</button></span>
+        </header>
+        <div class="bs-stage">
+          <button class="bs-monitor" id="bsMonitor" type="button" aria-label="點擊監視器，看心電圖"><span class="bs-tap">點我</span></button>
+          <div class="bs-patient" id="bsPatient"></div>
+          <figure class="bs-senior" id="bsSenior" hidden><img id="bsSeniorImg" src="assets/game/char/nurse_stern.svg" alt="學姊"></figure>
+        </div>
+        <section class="bs-dialog" aria-live="polite">
+          <div class="bs-text" id="bsText"></div>
+          <div class="bs-vitals" id="bsVitals" hidden></div>
+          <div class="pc-cpr" id="pcCpr" hidden>
+            <p>照著紅色圓圈的節拍，按 <span class="key">C</span> 或下面的按鈕壓胸。<br>每分鐘 100–120 下，每下壓深 5–6 公分、再讓胸口完全回彈。<br>連續壓 30 下，中間不要停。</p>
+            <div class="pc-beat" id="pcBeat"></div>
+            <div class="pc-cpr-row"><b id="pcCount">0 / 30</b><span id="pcRate"></span></div>
+            <button class="btn red pc-press" id="pcPress" type="button">壓胸 <span class="key">C</span></button>
+          </div>
+          <div class="bs-opts" id="bsOpts"></div>
+        </section>
+      </div>
+
+      <!-- the strip on the monitor -->
+      <div class="gmodal" id="ecgm" hidden>
+        <div class="dim"></div>
+        <div class="ecgcard">
+          <header><b id="ecgTitle">心電圖</b><button class="btn" id="ecgClose" type="button">✕ 關閉</button></header>
+          <div class="pc-ecg"><canvas id="ecgCv"></canvas><span class="pc-ecg-tag">II · 25 mm/s</span></div>
+          <div class="ecg-bar" id="ecgBar" hidden><i></i></div>
+          <small>看看 P 波、QRS 波、規不規則、快還是慢。</small>
+        </div>
+      </div>
+
+      <div class="gmodal" id="flowm" hidden>
+        <div class="dim"></div>
+        <div class="icard flowcard">
+          <div id="flowBody"></div>
+          <div class="row"><button class="btn go" id="flowClose" type="button">看完了 <span class="key">Esc</span></button></div>
+        </div>
+      </div>
+
+      <!-- the call bell at the station -->
+      <div class="gmodal with-me" id="bell" hidden>
+        <div class="dim"></div>
+        <figure class="portrait me"><img id="bellMe" src="assets/game/char/pgy_m_nervous.svg" alt="你"></figure>
+        <div class="icard pic wide">
+          <img class="ipic" id="bellPic" src="assets/game/char/nurse_panic.svg" alt="呼叫的人">
+          <div class="icol">
+            <div class="callhead"><span class="ring"><i></i>呼叫鈴</span><span id="bellWho"></span></div>
+            <p class="quote" id="bellText"></p>
+            <div class="row bell-opts" id="bellOpts"></div>
+            <small id="bellNote"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- the end of a level -->
+      <div class="gmodal result" id="result" hidden>
+        <div class="dim"></div>
+        <div class="icard rescard" role="dialog" aria-modal="true" aria-labelledby="rsKind">
+          <div class="rs-head"><img id="rsFig" src="assets/game/char/pgy_m_neutral.svg" alt=""><div><h3 id="rsKind"></h3><span id="rsSub"></span></div></div>
+          <div class="rs-text" id="rsText"></div>
+          <div class="rs-sbar" id="rsSbar" hidden></div>
+          <div class="tipcard" id="rsCard"></div>
+          <div class="row" id="rsBtns"></div>
+        </div>
+      </div>
+
+      <div class="gmodal" id="dialog" hidden>
+        <div class="dim"></div>
+        <figure class="portrait"><img id="dPortrait" src="assets/game/char/nurse_neutral.svg" alt="同事"></figure>
+        <figure class="portrait me"><img id="dMe" src="assets/game/char/pgy_m_sleepy.svg" alt="你"></figure>
+        <div class="gdialog">
+          <span class="name" id="dSpeaker">護理師</span>
+          <p class="gline" id="dLine"></p>
+          <div class="after"><button class="btn go" id="dBack" type="button">好，我回去了 <span class="key">E</span></button></div>
+        </div>
+      </div>
+
+      <div class="gmodal" id="handover" hidden>
+        <div class="dim"></div>
+        <div class="handover">
+          <div class="who"><img id="hPgy" src="assets/game/char/pgy_m_neutral.svg" alt="你"></div>
+          <div class="main">
+            <span class="when" id="hWhen">07:30 · 交班</span>
+            <h3 id="hTitle">你撐過今晚了</h3>
+            <!-- 大爛班's red stamp, slanted over the numbers (drawn by game.js, shown on that shift only) -->
+            <div class="stats-wrap"><div class="stats" id="hStats"></div><canvas class="stamp" id="hStamp" width="460" height="200" role="img" aria-label="大爛班" hidden></canvas></div>
+            <ol class="caselist" id="hCases"></ol>
+            <span class="mark">噹噹噹! 病人怎麼了? · 新進護理師心電圖訓練</span>
+            <p class="credit"></p>
+          </div>
+          <div class="side">
+            <div class="score"><b id="hScore">0</b><span>心電圖一次判讀答對率（%）</span></div>
+            <span class="badge" id="hBadge"></span>
+            <div class="chiefrow"><span class="avatar" id="hChiefAvatar"></span><p class="chief"><small>夜班護理師的心聲</small><span id="hChief"></span></p></div>
+            <div class="actions"><button class="btn go" id="hAgain" type="button">再值一晚</button><button class="btn go" id="hShare" type="button">分享圖卡</button><button class="btn" id="hCopy" type="button">複製文字</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the night as a story-sized card: shared through the phone's share sheet, or saved -->
+      <div class="gmodal" id="share" hidden>
+        <div class="dim"></div>
+        <div class="sharebox">
+          <canvas id="shareCanvas" width="1080" height="1920" aria-label="今晚的結果圖卡"></canvas>
+          <p class="share-hint" id="shareHint"></p>
+          <div class="share-actions"><button class="btn go" id="shareGo" type="button">分享</button><button class="btn" id="shareSave" type="button">下載圖片</button><button class="btn" id="shareClose" type="button">關閉 <span class="key">Esc</span></button></div>
+        </div>
+      </div>
+
+      <div class="start" id="start" hidden>
+        <div class="card">
+          <div class="lhs">
+            <p class="eyebrow" id="gEyebrow">噹噹噹! 病人怎麼了? · 新進護理師心電圖訓練</p>
+            <h1 id="gTitle">夜班，呼叫鈴響了</h1>
+            <p id="gIntro">你是今晚的夜班帶組護理師，手上有 12 床病人：1 間四人房、4 間雙人房。護理站在病房中間，休息室在右邊。呼叫鈴一響，先回護理站接聽，再去床邊：看病人、看心電圖、判讀心律，最後通報醫師。每一間病房有 3 顆心，選錯會扣心；過關時還有心，就能拿到金幣。</p>
+            <dl id="gKeys">
+              <dt><span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span></dt><dd>走路（按住 Shift 用跑的）</dd>
+              <dt><span class="key">E</span></dt><dd>接呼叫鈴、處理病人、坐沙發喝水休息、上廁所</dd>
+              <dt><span class="key">1</span><span class="key">2</span><span class="key">3</span></dt><dd>在床邊選擇要做的事（也可以直接點）</dd>
+              <dt><span class="key">C</span></dt><dd>病人心跳停了：照節拍按 C（或下面的按鈕）壓胸</dd>
+              <dt><span class="key">M</span></dt><dd>全景：看整層樓，再按一次回來</dd>
+              <dt><span class="key">P</span></dt><dd>暫停</dd>
+            </dl>
+          </div>
+          <div class="rhs">
+            <label class="sf full"><span>暱稱（必填）</span><input id="gName" type="text" maxlength="40" autocomplete="off" placeholder="例如：小明" required></label>
+            <p class="sf-hint" id="gHint" hidden></p>
+            <p>選你今晚的樣子：</p>
+            <div class="pick">
+              <button type="button" data-pgy="m"><img src="assets/game/char/pgy_m_neutral.svg" alt=""><span>男護理師</span></button>
+              <button type="button" data-pgy="f"><img src="assets/game/char/pgy_f_neutral.svg" alt=""><span>女護理師</span></button>
+            </div>
+            <p id="gDisclaimer" class="warn-note">內容包含病人病危、死亡和心跳停止的情節。本遊戲僅供教學練習，不能取代正式的臨床訓練、院內規範與醫囑；遇到緊急狀況請依院內流程求援。</p>
+            <p class="credit"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="brief" id="brief" hidden>
+        <header class="brief-head">
+          <div>
+            <p class="eyebrow">交班 · 內科病房</p>
+            <h1 id="briefTitle">今晚，病房交給你了</h1>
+            <p class="sub">先看一遍處理流程，準備好再開始。</p>
+          </div>
+        </header>
+        <div class="brief-main">
+          <section class="brief-you">
+            <div class="pic"><img id="briefMe" src="assets/game/char/pgy_m_confident.svg" alt="你"></div>
+            <div class="who"><h3>你<small id="briefLevel"></small></h3></div>
+          </section>
+          <section class="sheet"><div class="briefflow" id="briefFlow"></div></section>
+          <section class="brief-side">
+            <div class="bcard">
+              <div class="label">怎麼玩</div>
+              <div class="bkeys">
+                <div><span class="key">↑↓←→</span>走路（Shift 跑）</div>
+                <div><span class="key">E</span>接呼叫鈴、處理病人</div>
+                <div><span class="key">1 2 3</span>床邊選擇</div>
+                <div><span class="key">C</span>照節拍壓胸</div>
+                <div><span class="key">M</span>全景（看整層樓）</div>
+                <div><span class="key">P</span>暫停</div>
+              </div>
+              <div class="label rules">值班守則</div>
+              <ul class="brules">
+                <li>呼叫鈴響了，先回<b>護理站</b>，在呼叫鈴旁按 E 接聽，再去床邊。</li>
+                <li>每一關都有<b>自己的 3 顆心</b>，進新的關卡就重新計算，選錯扣一顆。心用完，這一關就失敗；過關時還有心，就得到一枚金幣。</li>
+                <li>床邊先看病人，再點<b>監視器</b>看心電圖。不用急，慢慢想。</li>
+                <li class="care"><b>記得照顧好自己：</b>累了去休息室的沙發坐下喝水休息，也別憋尿。精力歸零會累倒。</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+        <footer class="brief-go">
+          <div class="cta">
+            <button class="btn go" id="briefGo" type="button">我準備好了，開始值班 ▶</button>
+            <small>按 Enter 也可以開始</small>
+          </div>
+        </footer>
+      </div>
+
+      <div class="pause" id="pause" hidden>
+        <div class="pausecard" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+          <b id="pauseTitle">暫停中</b>
+          <p>時間停住了：呼叫鈴也不會響。</p>
+          <button class="btn go" id="pauseGo" type="button">繼續值班 ▶</button>
+          <small>按 <span class="key">P</span> 或 Enter 也可以繼續</small>
+        </div>
+      </div>
+
+      <div class="touch" id="touch">
+        <!-- a thumb stick that floats: the thumb goes down anywhere in the lower left and the ring
+             comes to it; drag in any direction; pushed to the rim, the nurse runs -->
+        <div class="stick-zone" id="stickZone" role="application" aria-label="走路的搖桿：在左下角按住，往任何方向滑，推到底用跑的"><div class="stick" id="stick"><div class="stick-knob" id="stickKnob"></div></div></div>
+        <button class="act" id="touchAct" type="button">E</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- phones play sideways: held upright the ward is a sliver, so the game waits to be turned -->
+  <div class="rotate" id="rotate" aria-live="polite">
+    <div class="rot-card">
+      <div class="rot-phone" aria-hidden="true"></div>
+      <b>請把手機轉成橫向</b>
+      <p>這個遊戲要橫著玩。如果畫面沒有跟著轉，請先關掉手機的「直向鎖定」。</p>
+    </div>
+  </div>
+  <script type="module" src="game/game.js"></script>
+</body>
+</html>
